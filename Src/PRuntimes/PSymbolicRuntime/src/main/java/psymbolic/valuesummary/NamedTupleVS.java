@@ -1,6 +1,6 @@
 package psymbolic.valuesummary;
 
-import p.runtime.values.PString;
+import psymbolic.runtime.concretevalues.PString;
 
 import java.util.*;
 
@@ -16,9 +16,21 @@ public class NamedTupleVS implements ValueSummary<NamedTupleVS> {
         this.tuple = tuple;
     }
 
-    public NamedTupleVS (NamedTupleVS namedTuple) {
-        this.names = new ArrayList<>(namedTuple.names);
-        this.tuple = new TupleVS(namedTuple.tuple);
+    /** Copy-constructor for NamedTupleVS
+     * @param old The NamedTupleVS to copy
+     */
+    public NamedTupleVS (NamedTupleVS old) {
+        this.names = new ArrayList<>(old.names);
+        this.tuple = new TupleVS(old.tuple);
+    }
+
+    /**
+     * Copy the value summary
+     *
+     * @return A new cloned copy of the value summary
+     */
+    public NamedTupleVS getCopy() {
+        return new NamedTupleVS(this);
     }
 
     /** Get the names of the NamedTupleVS fields
@@ -28,7 +40,7 @@ public class NamedTupleVS implements ValueSummary<NamedTupleVS> {
     }
 
     /** Make a new NamedTupleVS with the provided names and fields
-     * @param namesAndFields Alternating String and ValueSummary values where the Strings give the field names
+     * @param namesAndFields Alternating String and ValueSummary concretevalues where the Strings give the field names
      */
     public NamedTupleVS(Object... namesAndFields) {
         names = new ArrayList<>();

@@ -26,11 +26,10 @@ namespace Plang.CSharpRuntime
             {
                 return e.GetType().Name;
             }
-            else
-            {
-                var withPayload = ((PEvent)e).Payload == null ? "" : $" with payload ({((PEvent)e).Payload})";
-                return $"{e.GetType().Name}{withPayload}";
-            }
+            PEvent pe = (PEvent)(e);
+            string payload = pe.Payload == null ? "null" : pe.Payload.ToEscapedString();
+            var msg = pe.Payload == null ? "" : $" with payload ({payload})";
+            return $"{e.GetType().Name}{msg}";
         }
 
         public override void OnStateTransition(ActorId id, string stateName, bool isEntry)
@@ -78,7 +77,7 @@ namespace Plang.CSharpRuntime
         {
             base.OnWaitEvent(id, this.GetShortName(stateName), eventType);
         }
-        
+
         public override void OnMonitorStateTransition(string monitorType, string stateName, bool isEntry, bool? isInHotState)
         {
             if (stateName.Contains("__InitState__"))

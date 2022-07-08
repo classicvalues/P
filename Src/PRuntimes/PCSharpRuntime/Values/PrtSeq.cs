@@ -146,5 +146,22 @@ namespace Plang.CSharpRuntime.Values
             sb.Append(")");
             return sb.ToString();
         }
+
+        public string ToEscapedString()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("(");
+            string sep = "";
+            foreach (IPrtValue value in values)
+            {
+                string v = value == null ? "null" : value.ToEscapedString();
+                sb.Append(sep);
+                sb.Append(v);
+                sep = ", ";
+            }
+
+            sb.Append(")");
+            return sb.ToString();
+        }
     }
 }

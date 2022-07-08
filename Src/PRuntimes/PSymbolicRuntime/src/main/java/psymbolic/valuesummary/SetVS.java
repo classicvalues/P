@@ -10,7 +10,7 @@ public class SetVS<T extends ValueSummary<T>> implements ValueSummary<SetVS<T>> 
     /** The underlying set */
     private final ListVS<T> elements;
 
-    /** Get all the different possible guarded values */
+    /** Get all the different possible guarded concretevalues */
     public ListVS<T> getElements() {
         return elements;
     }
@@ -21,6 +21,22 @@ public class SetVS<T extends ValueSummary<T>> implements ValueSummary<SetVS<T>> 
 
     public SetVS(Guard universe) {
         this.elements = new ListVS<>(universe);
+    }
+
+    /** Copy-constructor for SetVS
+     * @param old The SetVS to copy
+     */
+    public SetVS(SetVS<T> old) {
+        this.elements = new ListVS<>(old.elements);
+    }
+
+    /**
+     * Copy the value summary
+     *
+     * @return A new cloned copy of the value summary
+     */
+    public SetVS<T> getCopy() {
+        return new SetVS(this);
     }
 
     public PrimitiveVS<Integer> size() {

@@ -7,7 +7,7 @@ import java.util.*;
 public class MapVS<K, V extends ValueSummary<V>> implements ValueSummary<MapVS<K,V>> {
     /** The set of keys */
     public final SetVS<PrimitiveVS<K>> keys;
-    /** The mapping from all possible keys to values */
+    /** The mapping from all possible keys to concretevalues */
     public final Map<K, V> entries;
 
     /** Make a new MapVS with the specified set of keys and mapping
@@ -27,6 +27,22 @@ public class MapVS<K, V extends ValueSummary<V>> implements ValueSummary<MapVS<K
     public MapVS(Guard universe) {
         this.keys = new SetVS<>(universe);
         this.entries = new HashMap<>();
+    }
+
+    /** Copy-constructor for MapVS
+     * @param old The MapVS to copy
+     */
+    public MapVS(MapVS<K, V> old) {
+        this(new SetVS<>(old.keys), new HashMap<>(old.entries));
+    }
+
+    /**
+     * Copy the value summary
+     *
+     * @return A new cloned copy of the value summary
+     */
+    public MapVS<K, V> getCopy() {
+        return new MapVS(this);
     }
 
     /** Get the number of entries in the MapVS
@@ -69,7 +85,7 @@ public class MapVS<K, V extends ValueSummary<V>> implements ValueSummary<MapVS<K
         final List<SetVS<PrimitiveVS<K>>> keysToMerge = new ArrayList<>();
         final Map<K, List<V>> valuesToMerge = new HashMap<>();
 
-        // add this set of entries' values, too
+        // add this set of entries' concretevalues, too
         for (Map.Entry<K, V> entry : entries.entrySet()) {
             valuesToMerge
                     .computeIfAbsent(entry.getKey(), (key) -> new ArrayList<>())

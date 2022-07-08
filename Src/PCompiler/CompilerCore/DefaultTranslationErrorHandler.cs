@@ -58,7 +58,7 @@ namespace Plang.Compiler
         public Exception IncorrectArgumentCount(ParserRuleContext location, int actualCount, int expectedCount)
         {
             return IssueError(location,
-                $"function or constructor call expected {expectedCount} arguments, got {actualCount}");
+                $"goto, function or constructor call expected {expectedCount} arguments, got {actualCount}");
         }
 
         public Exception MissingDeclaration(ParserRuleContext location, string declarationKind, string missingName)
@@ -80,7 +80,12 @@ namespace Plang.Compiler
         {
             return IssueError(location, "expected an interface or int or float type");
         }
-
+        
+        public Exception NoMainOrTestCase(string message)
+        {
+            return new TranslationException(message);
+        }
+        
         public Exception IllegalInterfaceCoerce(ParserRuleContext context, PLanguageType oldType, PLanguageType newType)
         {
             PEvent outlierEvent =

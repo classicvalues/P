@@ -1,18 +1,19 @@
 package psymbolic.runtime;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
 /** Represent a P enum type */
-public class Enum {
+public class Enum implements Serializable {
     /** Name of the enum type */
     private final String name;
-    /** Map from enum values to Integers */
+    /** Map from enum concretevalues to Integers */
     private final Map<String, Integer> stringToName;
 
     /** Make a new Enum type
      * @param name Name of the enum
-     * @param enums Possible enum values
+     * @param enums Possible enum concretevalues
      */
     public Enum(String name, String ... enums) {
         this.name = name;

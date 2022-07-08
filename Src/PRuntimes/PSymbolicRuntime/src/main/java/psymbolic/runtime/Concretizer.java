@@ -1,10 +1,8 @@
 package psymbolic.runtime;
 
-import p.runtime.values.*;
+import psymbolic.runtime.concretevalues.*;
 import psymbolic.valuesummary.*;
-import psymbolic.runtime.Message;
 import psymbolic.runtime.machine.Machine;
-import psymbolic.runtime.Event;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,6 +12,7 @@ import java.util.function.Predicate;
 import java.util.function.Function;
 
 public class Concretizer { 
+    public static boolean print = false;
 
     /**
      * Get a concrete value for a value summary
@@ -61,8 +60,10 @@ public class Concretizer {
                     pc = pc.and(key.getGuard());
                     mapVS = mapVS.restrict(pc);
                     GuardedValue<?> value = concretize(mapVS.entries.get(key));
-                    pc = pc.and(value.getGuard());
-                    map.put(key.getValue(), value.getValue());
+                    if (value != null) {
+                        pc = pc.and(value.getGuard());
+                        map.put(key.getValue(), value.getValue());
+                    }
                 }
             }
             return new GuardedValue<>(map, pc);
@@ -249,11 +250,11 @@ public class Concretizer {
     }
 
     /**
-     * Get a list of concrete values for the arguments
-     * @param pc Guard under which to concretize values
-     * @param stop specifies when to stop getting more concrete values
+     * Get a list of concrete concretevalues for the arguments
+     * @param pc Guard under which to concretize concretevalues
+     * @param stop specifies when to stop getting more concrete concretevalues
      * @param args arguments
-     * @return list of concrete values for arguments
+     * @return list of concrete concretevalues for arguments
      */ 
     public static List<GuardedValue<List<Object>>> getConcreteValues(Guard pc, Predicate<Integer> stop, Function<ValueSummary, GuardedValue<?>> concretizer, ValueSummary ... args) {
         Guard iterPc = Guard.constFalse();
@@ -269,9 +270,16 @@ public class Concretizer {
             for (int j = 0; j < args.length && !done; j++) {
                 GuardedValue<?> guardedValue = concretizer.apply(args[j].restrict(iterPc));
                 if (guardedValue == null) {
-                    if (j == 0) done = true;
-                    skip = true;
-                    break;
+                    if (j == 0) {
+                        done = true;
+                        break;
+                    }
+                    if (print) {
+                        concreteArgs.add(null);
+                    } else {
+                        skip = true;
+                        break;
+                    }
                 } else {
                     iterPc = iterPc.and(guardedValue.getGuard());
                     concreteArgs.add(guardedValue.getValue());
@@ -285,20 +293,73 @@ public class Concretizer {
                 i--;
                 continue;
             }
+            if (print) {
+                System.out.println("\t#" + concreteArgsList.size() + "\t" + concreteArgs);
+            }
             concreteArgsList.add(new GuardedValue<>(concreteArgs, iterPc));
             i++;
         }
         return concreteArgsList;
     }
-    
+
     /**
-     * Count the number of concrete values for arguments
-     * @param pc Guard under which to concretize values
+     * Get the number of concrete concretevalues for the arguments
+     * @param pc Guard under which to concretize concretevalues
+     * @param stop specifies when to stop getting more concrete concretevalues
      * @param args arguments
-     * @return number of concrete values
+     * @return number of concrete concretevalues for arguments
+     */
+    public static int countConcreteValues(Guard pc, Predicate<Integer> stop, Function<ValueSummary, GuardedValue<?>> concretizer, ValueSummary ... args) {
+        Guard iterPc = Guard.constFalse();
+        Guard alreadySeen = Guard.constFalse();
+        boolean skip = false;
+        boolean done = false;
+        int i = 0;
+        int result = 0;
+        while (!stop.test(i)) {
+            iterPc = pc.and(alreadySeen.not());
+            for (int j = 0; j < args.length && !done; j++) {
+                GuardedValue<?> guardedValue = concretizer.apply(args[j].restrict(iterPc));
+                if (guardedValue == null) {
+                    if (j == 0) done = true;
+//                    skip = true;
+//                    break;
+                } else {
+                    iterPc = iterPc.and(guardedValue.getGuard());
+                }
+            }
+            alreadySeen = alreadySeen.or(iterPc);
+            if (done) {
+                break;
+            }
+            if (skip) {
+                i--;
+                continue;
+            }
+            result++;
+            i++;
+        }
+        return result;
+    }
+
+    /**
+     * Count the number of concrete concretevalues for arguments
+     * @param pc Guard under which to concretize concretevalues
+     * @param args arguments
+     * @return number of concrete concretevalues
      */ 
     public static int getNumConcreteValues(Guard pc, ValueSummary ... args) {
-        return getConcreteValues(pc, x -> false, Concretizer::concretize, args).size();
+    	int i = 0;
+    	try {
+            if (print) {
+                i = getConcreteValues(pc, x -> false, Concretizer::concretize, args).size();
+            } else {
+                i = countConcreteValues(pc, x -> false, Concretizer::concretize, args);
+            }
+    	} catch (NullPointerException e) {
+            throw new RuntimeException("Counting concrete concretevalues failed.");
+    	}
+    	return i;
     }
 
 }

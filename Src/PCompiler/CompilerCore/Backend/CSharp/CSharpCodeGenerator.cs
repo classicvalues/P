@@ -15,6 +15,48 @@ namespace Plang.Compiler.Backend.CSharp
 {
     public class CSharpCodeGenerator : ICodeGenerator
     {
+
+        /// <summary>
+        /// This compiler has a compilation stage.
+        /// </summary>
+        public bool HasCompilationStage => true;
+
+        public void Compile(ICompilationJob job)
+        {
+            var csprojName = $"{job.ProjectName}.csproj";
+            var csprojPath = Path.Combine(job.ProjectRootPath.FullName, csprojName);
+            var mainFilePath = Path.Combine(job.ProjectRootPath.FullName, "Test.cs");
+            string stdout = "";
+            string stderr = "";
+            // if the file does not exist then create the file
+            if (!File.Exists(csprojPath))
+            {
+                string csprojTemplate = Constants.csprojTemplate.Replace("-directory-",
+                    Path.GetRelativePath(job.ProjectRootPath.FullName, job.OutputDirectory.FullName));
+                File.WriteAllText(csprojPath, csprojTemplate);
+            }
+
+            // if the Main file does not exist then create the file
+            if (!File.Exists(mainFilePath))
+            {
+                string mainCode = Constants.mainCode.Replace("-projectName-", job.ProjectName);
+                File.WriteAllText(mainFilePath, mainCode);
+            }
+
+            // compile the csproj file
+            string[] args = new[] { "build -c Release", csprojName };
+
+            int exitCode = Compiler.RunWithOutput(job.ProjectRootPath.FullName, out stdout, out stderr, "dotnet", args);
+            if (exitCode != 0)
+            {
+                throw new TranslationException($"Compiling generated C# code FAILED!\n" + $"{stdout}\n" + $"{stderr}\n");
+            }
+            else
+            {
+                job.Output.WriteInfo($"{stdout}");
+            }
+        }
+
         public IEnumerable<CompiledFile> GenerateCode(ICompilationJob job, Scope globalScope)
         {
             CompilationContext context = new CompilationContext(job);
@@ -923,29 +965,37 @@ namespace Plang.Compiler.Backend.CSharp
 
                 case ReceiveStmt receiveStmt:
                     string eventName = context.Names.GetTemporaryName("recvEvent");
-                    string[] eventTypeNames = receiveStmt.Cases.Keys.Select(evt => context.Names.GetNameForDecl(evt))
-                        .ToArray();
+                    HashSet<string> eventTypeNames = receiveStmt.Cases.Keys.Select(evt => context.Names.GetNameForDecl(evt))
+                        .ToHashSet();
+                    eventTypeNames.Add("PHalt"); // halt as a special case for receive
                     string recvArgs = string.Join(", ", eventTypeNames.Select(name => $"typeof({name})"));
                     context.WriteLine(output, $"var {eventName} = await currentMachine.TryReceiveEvent({recvArgs});");
                     context.WriteLine(output, $"switch ({eventName}) {{");
-                    foreach (KeyValuePair<PEvent, Function> recvCase in receiveStmt.Cases)
+                    // add halt as a special case if doesnt exist
+                    if (receiveStmt.Cases.All(kv => kv.Key.Name != "PHalt"))
                     {
-                        string caseName = context.Names.GetTemporaryName("evt");
-                        context.WriteLine(output, $"case {context.Names.GetNameForDecl(recvCase.Key)} {caseName}: {{");
-                        if (recvCase.Value.Signature.Parameters.FirstOrDefault() is Variable caseArg)
+                        context.WriteLine(output,"case PHalt _hv: { currentMachine.TryRaiseEvent(_hv); break;} ");
+
+                    }
+
+                    foreach (var (key, value) in receiveStmt.Cases)
+                    {
+                        var caseName = context.Names.GetTemporaryName("evt");
+                        context.WriteLine(output, $"case {context.Names.GetNameForDecl(key)} {caseName}: {{");
+                        if (value.Signature.Parameters.FirstOrDefault() is { } caseArg)
                         {
                             context.WriteLine(output,
                                 $"{GetCSharpType(caseArg.Type)} {context.Names.GetNameForDecl(caseArg)} = ({GetCSharpType(caseArg.Type)})({caseName}.Payload);");
                         }
 
-                        foreach (Variable local in recvCase.Value.LocalVariables)
+                        foreach (Variable local in value.LocalVariables)
                         {
                             PLanguageType type = local.Type;
                             context.WriteLine(output,
                                 $"{GetCSharpType(type, true)} {context.Names.GetNameForDecl(local)} = {GetDefaultValue(type)};");
                         }
 
-                        foreach (IPStmt caseStmt in recvCase.Value.Body.Statements)
+                        foreach (IPStmt caseStmt in value.Body.Statements)
                         {
                             WriteStmt(context, output, function, caseStmt);
                         }
@@ -1045,7 +1095,7 @@ namespace Plang.Compiler.Backend.CSharp
 
                     context.WriteLine(output, ");");
                     break;
-                
+
                 case ForeachStmt foreachStmt:
                     var tempVarName = $"__temp_{context.Names.GetNameForDecl(foreachStmt.Item)}";
                     context.Write(output, $"foreach (var {tempVarName} in ");
@@ -1055,7 +1105,7 @@ namespace Plang.Compiler.Backend.CSharp
                     WriteStmt(context, output, function, foreachStmt.Body);
                     context.WriteLine(output, "}");
                     break;
-                
+
                 case WhileStmt whileStmt:
                     context.Write(output, "while (");
                     WriteExpr(context, output, whileStmt.Condition);
@@ -1080,7 +1130,7 @@ namespace Plang.Compiler.Backend.CSharp
                     WriteExpr(context, output, mapAccessExpr.IndexExpr);
                     context.Write(output, "]");
                     break;
-                
+
                 case SetAccessExpr setAccessExpr:
                     context.Write(output, "((PrtSet)");
                     WriteLValue(context, output, setAccessExpr.SetExpr);
@@ -1088,7 +1138,7 @@ namespace Plang.Compiler.Backend.CSharp
                     WriteExpr(context, output, setAccessExpr.IndexExpr);
                     context.Write(output, "]");
                     break;
-                
+
                 case NamedTupleAccessExpr namedTupleAccessExpr:
                     context.Write(output, "((PrtNamedTuple)");
                     WriteExpr(context, output, namedTupleAccessExpr.SubExpr);
@@ -1601,10 +1651,10 @@ namespace Plang.Compiler.Backend.CSharp
 
                 case BinOpType.Div:
                     return "/";
-                
+
                 case BinOpType.Mod:
                     return "%";
-                
+
                 case BinOpType.Lt:
                     return "<";
 

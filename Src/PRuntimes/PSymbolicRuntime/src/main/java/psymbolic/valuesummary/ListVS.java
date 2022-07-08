@@ -37,6 +37,15 @@ public class ListVS<T extends ValueSummary<T>> implements ValueSummary<ListVS<T>
         this(new PrimitiveVS<>(old.size), new ArrayList<>(old.items));
     }
 
+    /**
+     * Copy the value summary
+     *
+     * @return A new cloned copy of the value summary
+     */
+    public ListVS<T> getCopy() {
+        return new ListVS(this);
+    }
+
     /** Is the list empty?
      * @return Whether the list is empty or not
      */
@@ -51,7 +60,7 @@ public class ListVS<T extends ValueSummary<T>> implements ValueSummary<ListVS<T>
     public PrimitiveVS<Integer> size() { return size; }
 
     /**
-     * Is the value summary empty with no values in it
+     * Is the value summary empty with no concretevalues in it
      */
     @Override
     public boolean isEmptyVS() {

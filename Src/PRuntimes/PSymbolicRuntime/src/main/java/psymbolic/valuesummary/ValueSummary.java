@@ -1,9 +1,10 @@
 package psymbolic.valuesummary;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public interface ValueSummary<T extends ValueSummary<T>> {
+public interface ValueSummary<T extends ValueSummary<T>> extends Serializable {
 
     static UnionVS castToAny(Guard pc, ValueSummary<?> toCast) {
         if (toCast instanceof UnionVS) { return (UnionVS) toCast.restrict(pc); }
@@ -93,7 +94,7 @@ public interface ValueSummary<T extends ValueSummary<T>> {
      }
 
     /**
-     * Check whether a value summary has any values under any path condition
+     * Check whether a value summary has any concretevalues under any path condition
      *
      * @return Whether the path condition is empty
      */
@@ -144,8 +145,15 @@ public interface ValueSummary<T extends ValueSummary<T>> {
 
     /**
      * Get the Guard that represents the universe of the value summary
-     * Disjunction of the guards of all the guarded values
+     * Disjunction of the guards of all the guarded concretevalues
      * @return The universe of the value summary
      */
     Guard getUniverse();
+
+    /**
+     * Copy the value summary
+     *
+     * @return A new cloned copy of the value summary
+     */
+    T getCopy();
 }

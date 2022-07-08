@@ -2,6 +2,7 @@
 using Plang.Compiler;
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using UnitTests.Core;
 
@@ -154,7 +155,7 @@ namespace PImplementation
         {
             Compiler compiler = new Compiler();
             TestExecutionStream outputStream = new TestExecutionStream(scratchDirectory);
-            CompilationJob compilationJob = new CompilationJob(outputStream, scratchDirectory, CompilerOutput.CSharp, sources, "Main", scratchDirectory);
+            CompilationJob compilationJob = new CompilationJob(outputStream, scratchDirectory, CompilerOutput.CSharp, sources.Select(x => x.FullName).ToList(), "Main", scratchDirectory);
             try
             {
                 compiler.Compile(compilationJob);

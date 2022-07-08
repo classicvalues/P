@@ -39,15 +39,15 @@ namespace Plang.Compiler
                 commandlineOutput.WriteInfo($"==== Loading project file: {projectFile}");
 
                 var outputLanguage = CompilerOutput.CSharp;
-                List<FileInfo> inputFiles = new List<FileInfo>();
+                HashSet<string> inputFiles = new HashSet<string>();
                 bool generateSourceMaps = false;
-                List<string> projectDependencies = new List<string>();
+                HashSet<string> projectDependencies = new HashSet<string>();
 
                 // get all project dependencies and the input files
-                var (fileInfos, list) = GetAllProjectDependencies(projectFilePath);
+                var (fileInfos, list) = GetAllProjectDependencies(projectFilePath, inputFiles, projectDependencies);
 
-                inputFiles.AddRange(fileInfos);
-                projectDependencies.AddRange(list);
+                inputFiles.UnionWith(fileInfos);
+                projectDependencies.UnionWith(list);
 
                 if (inputFiles.Count == 0)
                 {
@@ -65,8 +65,8 @@ namespace Plang.Compiler
                 GetTargetLanguage(projectFilePath, ref outputLanguage, ref generateSourceMaps);
 
                 job = new CompilationJob(output: new DefaultCompilerOutput(outputDirectory, aspectjOutputDirectory), outputDirectory,
-                    outputLanguage: outputLanguage, inputFiles: inputFiles, projectName: projectName, projectFilePath.Directory,
-                    generateSourceMaps: generateSourceMaps, projectDependencies: projectDependencies, aspectjOutputDir: aspectjOutputDirectory);
+                    outputLanguage: outputLanguage, inputFiles: inputFiles.ToList(), projectName: projectName, projectFilePath.Directory,
+                    generateSourceMaps: generateSourceMaps, projectDependencies: projectDependencies.ToList(), aspectjOutputDir: aspectjOutputDirectory);
 
                 commandlineOutput.WriteInfo($"----------------------------------------");
                 return true;
@@ -96,7 +96,7 @@ namespace Plang.Compiler
             CompilerOutput outputLanguage = CompilerOutput.CSharp;
             DirectoryInfo outputDirectory = null;
             DirectoryInfo aspectjOutputDirectory = null;
-            List<FileInfo> inputFiles = new List<FileInfo>();
+            HashSet<string> inputFiles = new HashSet<string>();
             commandlineOutput.WriteInfo($"----------------------------------------");
             job = null;
             try
@@ -137,15 +137,16 @@ namespace Plang.Compiler
                                 switch (colonArg?.ToLowerInvariant())
                                 {
                                     case null:
-                                        throw new CommandlineParsingError("Missing generation argument, expecting generate:[C,CSharp,RVM]");
+                                        throw new CommandlineParsingError("Missing generation argument, expecting generate:[C,CSharp,Java,RVM,Symbolic]");
                                     case "c":
                                         outputLanguage = CompilerOutput.C;
                                         break;
-
                                     case "csharp":
                                         outputLanguage = CompilerOutput.CSharp;
                                         break;
-                                    
+                                    case "java":
+                                        outputLanguage = CompilerOutput.Java;
+                                        break;
                                     case "rvm":
                                         outputLanguage = CompilerOutput.Rvm;
                                         break;
@@ -153,7 +154,7 @@ namespace Plang.Compiler
                                         outputLanguage = CompilerOutput.Symbolic;
                                         break;
                                     default:
-                                        throw new CommandlineParsingError($"Unrecognized generate option '{colonArg}', expecting C or CSharp or Symbolic");
+                                        throw new CommandlineParsingError($"Unrecognized generate option '{colonArg}', expecting one of C, CSharp, Java, RVM, Symbolic.");
                                 }
                                 break;
 
@@ -184,7 +185,7 @@ namespace Plang.Compiler
                     {
                         if (IsLegalPFile(arg, out FileInfo fullPathName))
                         {
-                            inputFiles.Add(fullPathName);
+                            inputFiles.Add(fullPathName.FullName);
                             commandlineOutput.WriteInfo($"....... includes p file: {fullPathName.FullName}");
                         }
                         else
@@ -200,7 +201,7 @@ namespace Plang.Compiler
                     return false;
                 }
 
-                string projectName = targetName ?? Path.GetFileNameWithoutExtension(inputFiles[0].FullName);
+                string projectName = targetName ?? Path.GetFileNameWithoutExtension(inputFiles.FirstOrDefault());
                 if (!IsLegalProjectName(projectName))
                 {
                     commandlineOutput.WriteError($"{projectName} is not a legal project name");
@@ -218,7 +219,7 @@ namespace Plang.Compiler
                 }
 
                 job = new CompilationJob(output: new DefaultCompilerOutput(outputDirectory, aspectjOutputDirectory), outputDirectory,
-                    outputLanguage: outputLanguage, inputFiles: inputFiles, projectName: projectName, projectRoot: outputDirectory,
+                    outputLanguage: outputLanguage, inputFiles: inputFiles.ToList(), projectName: projectName, projectRoot: outputDirectory,
                     aspectjOutputDir: aspectjOutputDirectory);
                 commandlineOutput.WriteInfo($"----------------------------------------");
                 return true;
@@ -240,15 +241,17 @@ namespace Plang.Compiler
         /// Parse the P Project file and return all the input P files and project dependencies (includes transitive dependencies)
         /// </summary>
         /// <param name="projectFilePath">Path to the P Project file</param>
+        /// <param name="preInputFiles"></param>
+        /// <param name="preProjectDependencies"></param>
         /// <returns></returns>
-        private (List<FileInfo> inputFiles, List<string> projectDependencies) GetAllProjectDependencies(FileInfo projectFilePath)
+        private (HashSet<string> inputFiles, HashSet<string> projectDependencies) GetAllProjectDependencies(FileInfo projectFilePath, HashSet<string> preInputFiles, HashSet<string> preProjectDependencies)
         {
-            var projectDependencies = new List<string>();
-            var inputFiles = new List<FileInfo>();
+            var projectDependencies = new HashSet<string>(preProjectDependencies);
+            var inputFiles = new HashSet<string>(preInputFiles);
             XElement projectXml = XElement.Load(projectFilePath.FullName);
             projectDependencies.Add(GetProjectName(projectFilePath));
             // add all input files from the current project
-            inputFiles.AddRange(ReadAllInputFiles(projectFilePath));
+            inputFiles.UnionWith(ReadAllInputFiles(projectFilePath));
 
             // get recursive project dependencies
             foreach (XElement projectDepen in projectXml.Elements("IncludeProject"))
@@ -260,9 +263,10 @@ namespace Plang.Compiler
 
                 commandlineOutput.WriteInfo($"==== Loading project file: {fullProjectDepenPathName.FullName}");
 
-                var inputsAndDependencies = GetAllProjectDependencies(fullProjectDepenPathName);
-                projectDependencies.AddRange(inputsAndDependencies.projectDependencies);
-                inputFiles.AddRange(inputsAndDependencies.inputFiles);
+                if (projectDependencies.Contains(GetProjectName(fullProjectDepenPathName))) continue;
+                var inputsAndDependencies = GetAllProjectDependencies(fullProjectDepenPathName, inputFiles, projectDependencies);
+                projectDependencies.UnionWith(inputsAndDependencies.projectDependencies);
+                inputFiles.UnionWith(inputsAndDependencies.inputFiles);
             }
 
             return (inputFiles, projectDependencies);
@@ -309,9 +313,9 @@ namespace Plang.Compiler
 
         private DirectoryInfo GetAspectjOutputDirectory(FileInfo fullPathName, DirectoryInfo outputDir)
         {
-            XElement projectXML = XElement.Load(fullPathName.FullName);
-            if (projectXML.Elements("AspectjOutputDir").Any())
-                return Directory.CreateDirectory(projectXML.Element("AspectjOutputDir").Value);
+            XElement projectXml = XElement.Load(fullPathName.FullName);
+            if (projectXml.Elements("AspectjOutputDir").Any())
+                return Directory.CreateDirectory(projectXml.Element("AspectjOutputDir").Value);
             else
                 return outputDir;
         }
@@ -342,15 +346,20 @@ namespace Plang.Compiler
                     outputLanguage = CompilerOutput.CSharp;
                     break;
 
+                case "java":
+                    outputLanguage = CompilerOutput.Java;
+                    break;
+                
                 case "rvm":
                     outputLanguage = CompilerOutput.Rvm;
                     break;
+                
                 case "symbolic":
                     outputLanguage = CompilerOutput.Symbolic;
                     break;
 
                 default:
-                    throw new CommandlineParsingError($"Expected C, CSharp or Symbolic as target, received {projectXml.Element("Target")?.Value}");
+                    throw new CommandlineParsingError($"Expected C, CSharp, Java, RVM, or Symbolic as target, received {projectXml.Element("Target")?.Value}");
             }
         }
 
@@ -359,9 +368,9 @@ namespace Plang.Compiler
         /// </summary>
         /// <param name="fullPathName">Path to the pproj file</param>
         /// <returns>List of the all the P files included in the project</returns>
-        private List<FileInfo> ReadAllInputFiles(FileInfo fullPathName)
+        private HashSet<string> ReadAllInputFiles(FileInfo fullPathName)
         {
-            List<FileInfo> inputFiles = new List<FileInfo>();
+            HashSet<string> inputFiles = new HashSet<string>();
             XElement projectXml = XElement.Load(fullPathName.FullName);
 
             // get all files to be compiled
@@ -374,7 +383,9 @@ namespace Plang.Compiler
 
                     if (Directory.Exists(inputFileNameFull))
                     {
-                        foreach (var files in Directory.GetFiles(inputFileNameFull, "*.p"))
+                        var enumerate = new EnumerationOptions();
+                        enumerate.RecurseSubdirectories = true;
+                        foreach (var files in Directory.GetFiles(inputFileNameFull, "*.p", enumerate))
                         {
                             pFiles.Add(files);
                         }
@@ -389,7 +400,7 @@ namespace Plang.Compiler
                         if (IsLegalPFile(pFile, out FileInfo pFilePathName))
                         {
                             commandlineOutput.WriteInfo($"....... includes p file: {pFilePathName.FullName}");
-                            inputFiles.Add(pFilePathName);
+                            inputFiles.Add(pFilePathName.FullName);
                         }
                         else
                         {

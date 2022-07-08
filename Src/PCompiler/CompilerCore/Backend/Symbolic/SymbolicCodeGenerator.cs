@@ -23,6 +23,35 @@ namespace Plang.Compiler.Backend.Symbolic
             return new List<CompiledFile> { javaSource };
         }
 
+        /// <summary>
+        /// This compiler has a compilation stage.
+        /// </summary>
+        public bool HasCompilationStage => true;
+
+        public void Compile(ICompilationJob job)
+        {
+            var pomPath = Path.Combine(job.ProjectRootPath.FullName, "pom.xml");
+            string stdout = "";
+            string stderr = "";
+            // if the file does not exist then create the file
+            if (!File.Exists(pomPath))
+            {
+                string pomTemplate = Constants.pomTemplate.Replace("projectName",job.ProjectName);
+                File.WriteAllText(pomPath, pomTemplate);
+            }
+
+            // compile the csproj file
+            string[] args = new[] { "clean package"};
+
+            int exitCode = Compiler.RunWithOutput(job.ProjectRootPath.FullName, out stdout, out stderr, "mvn", args);
+            if (exitCode != 0)
+            {
+                throw new TranslationException($"Compiling generated Symbolic Java code FAILED!\n" + $"{stdout}\n" + $"{stderr}\n");
+            }
+
+            job.Output.WriteInfo($"{stdout}");
+        }
+
         private CompiledFile GenerateSource(CompilationContext context, Scope globalScope)
         {
             var source = new CompiledFile(context.FileName);
@@ -158,6 +187,23 @@ namespace Plang.Compiler.Backend.Symbolic
 
             context.WriteLine(output);
 
+            context.WriteLine(output, "@Override");
+            context.WriteLine(output, "public List<ValueSummary> getLocalState() {");
+            context.WriteLine(output, "    List<ValueSummary> res = super.getLocalState();");
+            foreach (var field in machine.Fields)
+                context.WriteLine(output, $"    res.add({CompilationContext.GetVar(field.Name)});");
+            context.WriteLine(output, "    return res;");
+            context.WriteLine(output, "}");
+            context.WriteLine(output);
+
+            context.WriteLine(output, "@Override");
+            context.WriteLine(output, "public int setLocalState(List<ValueSummary> localState) {");
+            context.WriteLine(output, "    int idx = super.setLocalState(localState);");
+            foreach (var field in machine.Fields)
+                context.WriteLine(output, $"    {CompilationContext.GetVar(field.Name)} = ({GetSymbolicType(field.Type)}) localState.get(idx++);");
+            context.WriteLine(output, "    return idx;");
+            context.WriteLine(output, "}");
+            context.WriteLine(output);
 
             WriteMachineConstructor(context, output, machine);
 
@@ -199,6 +245,23 @@ namespace Plang.Compiler.Backend.Symbolic
 
             context.WriteLine(output);
 
+            context.WriteLine(output, "@Override");
+            context.WriteLine(output, "public List<ValueSummary> getLocalState() {");
+            context.WriteLine(output, "    List<ValueSummary> res = super.getLocalState();");
+            foreach (var field in machine.Fields)
+                context.WriteLine(output, $"    res.add({CompilationContext.GetVar(field.Name)});");
+            context.WriteLine(output, "    return res;");
+            context.WriteLine(output, "}");
+            context.WriteLine(output);
+
+            context.WriteLine(output, "@Override");
+            context.WriteLine(output, "public int setLocalState(List<ValueSummary> localState) {");
+            context.WriteLine(output, "    int idx = super.setLocalState(localState);");
+            foreach (var field in machine.Fields)
+                context.WriteLine(output, $"    {CompilationContext.GetVar(field.Name)} = ({GetSymbolicType(field.Type)}) localState.get(idx++);");
+            context.WriteLine(output, "    return idx;");
+            context.WriteLine(output, "}");
+            context.WriteLine(output);
 
             WriteMachineConstructor(context, output, machine);
 
@@ -573,7 +636,7 @@ namespace Plang.Compiler.Backend.Symbolic
             }
 
             if (function is WhileFunction)
-            { 
+            {
                 /* Prologue */
                 var loopPCScope = context.FreshPathConstraintScope();
                 context.WriteLine(output, $"Guard {loopPCScope.PathConstraintVar} = {rootPCScope.PathConstraintVar};");
@@ -1227,7 +1290,7 @@ namespace Plang.Compiler.Backend.Symbolic
             {
                 NamedTupleType valueTupleType = (NamedTupleType) valueType;
                 NamedTupleType locationTupleType = (NamedTupleType) locationType;
-                
+
                 if (valueTupleType.Fields.Count != locationTupleType.Fields.Count)
                         throw new NotImplementedException(
                             $"Cannot yet handle assignment to variable of type {locationType.CanonicalRepresentation} " +
@@ -1250,7 +1313,7 @@ namespace Plang.Compiler.Backend.Symbolic
             {
                 TupleType valueTupleType = (TupleType) valueType;
                 TupleType locationTupleType = (TupleType) locationType;
-                
+
                 if (valueTupleType.Types.Count != locationTupleType.Types.Count)
                         throw new NotImplementedException(
                             $"Cannot yet handle assignment to variable of type {locationType.CanonicalRepresentation} " +
@@ -1791,12 +1854,12 @@ namespace Plang.Compiler.Backend.Symbolic
                     context.Write(output, ")");
                     break;
                 case NamedTupleAccessExpr namedTupleAccessExpr:
-                    context.Write(output, $"({GetSymbolicType(namedTupleAccessExpr.Type)})(");
+                    context.Write(output, $"(({GetSymbolicType(namedTupleAccessExpr.Type)})(");
                     string prefix = GetInlineCastPrefix(namedTupleAccessExpr.Entry.Type, namedTupleAccessExpr.Type, context, pcScope);
                     context.Write(output, prefix);
                     context.Write(output, "(");
                     WriteExpr(context, output, pcScope, namedTupleAccessExpr.SubExpr);
-                    context.Write(output, $").getField(\"{namedTupleAccessExpr.FieldName}\"))");
+                    context.Write(output, $").getField(\"{namedTupleAccessExpr.FieldName}\")))");
                     if (prefix != "") context.Write(output, ")");
                     break;
                 case ThisRefExpr thisRefExpr:
@@ -2047,13 +2110,13 @@ namespace Plang.Compiler.Backend.Symbolic
                     return foreignType.CanonicalRepresentation;
                 case SequenceType _:
                     return "PSeq";
-                case MapType _: 
+                case MapType _:
                     return "PMap";
-                case NamedTupleType _: 
+                case NamedTupleType _:
                     return "PNamedTuple";
-                case TupleType _: 
+                case TupleType _:
                     return "PTuple";
-                case EnumType _: 
+                case EnumType _:
                     return "PEnum";
                 default:
                     throw new NotImplementedException($"Concrete type '{type.OriginalRepresentation}' is not supported");
@@ -2119,7 +2182,7 @@ namespace Plang.Compiler.Backend.Symbolic
                     return $"PrimitiveVS<{foreignType.CanonicalRepresentation}>";
                 case SequenceType sequenceType:
                     return $"ListVS<{GetSymbolicType(sequenceType.ElementType, true)}>";
-                case MapType mapType: 
+                case MapType mapType:
                     return $"MapVS<" +
                         $"{GetConcreteBoxedType(mapType.KeyType)}, " +
                         $"{GetSymbolicType(mapType.ValueType, true)}>";
@@ -2217,6 +2280,9 @@ namespace Plang.Compiler.Backend.Symbolic
             context.WriteLine(output, $"public class {context.ProjectName.ToLower()} implements Program {{");
             context.WriteLine(output);
             context.WriteLine(output, $"public static Scheduler {CompilationContext.SchedulerVar};");
+            context.WriteLine(output);
+            context.WriteLine(output, "@Override");
+            context.WriteLine(output, $"public Scheduler getScheduler () {{ return this.{CompilationContext.SchedulerVar}; }}");
             context.WriteLine(output);
             context.WriteLine(output, "@Override");
             context.WriteLine(output, $"public void setScheduler (Scheduler s) {{ this.{CompilationContext.SchedulerVar} = s; }}");

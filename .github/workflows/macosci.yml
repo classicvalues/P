@@ -6,19 +6,24 @@ jobs:
   Build-And-Test-MacOS:
     runs-on: macos-latest
     steps:
-    - name: Checkout with submodules
-      uses: actions/checkout@v1
-      with:
-        submodules: recursive
+    - uses: actions/checkout@v1
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: 3.1.100
     - name: Set up JDK
       uses: actions/setup-java@v1
       with:
-        java-version: 1.8
-    - name: Build Compiler
+        java-version: 11
+    - name: Cache Maven packages
+      uses: actions/cache@v2
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+    - name: Build Java P runtime
+      run: mvn clean package -f Src/PRuntimes/PJavaRuntime
+    - name: Build
       run: dotnet build --configuration Release
-    - name: Test Compiler
+    - name: Test
       run: dotnet test --configuration Release
